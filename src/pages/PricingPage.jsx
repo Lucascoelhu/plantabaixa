@@ -189,12 +189,25 @@ export default function PricingPage() {
       {/* PIX MODAL */}
       {pixModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000,
-          display:'flex', alignItems:'flex-end', justifyContent:'center' }}
+          display:'flex', alignItems:'flex-end', justifyContent:'center',
+          overflowY:'auto' }}
           onClick={() => !pixPaid && setPixModal(false)}>
           <div style={{ background:'var(--surface)', border:'1px solid var(--border)',
             borderRadius:'20px 20px 0 0', padding:24, width:'100%', maxWidth:440,
-            maxHeight:'90dvh', overflowY:'auto' }}
+            minHeight:'auto', marginTop:'auto' }}
             onClick={e => e.stopPropagation()}>
+
+            {/* Botao fechar */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+              <div style={{ width:40, height:4, background:'var(--border)', borderRadius:2, margin:'0 auto' }} />
+              {!pixPaid && (
+                <button onClick={() => setPixModal(false)} style={{
+                  background:'var(--surface2)', border:'1px solid var(--border)',
+                  borderRadius:8, color:'var(--text2)', fontSize:18,
+                  width:32, height:32, cursor:'pointer', display:'flex',
+                  alignItems:'center', justifyContent:'center', flexShrink:0 }}>x</button>
+              )}
+            </div>
 
             <div style={{ width:40, height:4, background:'var(--border)', borderRadius:2, margin:'0 auto 20px' }} />
 

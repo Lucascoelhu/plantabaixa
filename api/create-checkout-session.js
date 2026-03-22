@@ -22,7 +22,7 @@ module.exports = async function handler(req, res) {
           description: 'Todas as funcionalidades PRO sem mensalidade.',
           quantity: 1,
           currency_id: 'BRL',
-          unit_price: 99.90,
+          unit_price: 9.90, //preço
         }],
         payer: { email },
         back_urls: {

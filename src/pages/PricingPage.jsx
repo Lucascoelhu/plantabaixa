@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { createCheckoutSession } from '../lib/stripe'
+import { createCheckoutSession } from '../lib/mercadopago';
 
 export default function PricingPage() {
   const { user, isPro } = useAuth()

@@ -10,7 +10,7 @@ module.exports = async function handler(req, res) {
   const { userId, email } = req.body
   if (!userId || !email) return res.status(400).json({ error: 'Missing userId or email' })
 
-  const appUrl = process.env.VITE_APP_URL || 'http://localhost:3000'
+  const appUrl = process.env.VITE_APP_URL || 'https://plantabaixa.vercel.app'
 
   try {
     const preference = new Preference(client)
@@ -18,22 +18,18 @@ module.exports = async function handler(req, res) {
       body: {
         items: [{
           id: 'planta-pro',
-          title: 'Planta Pro — Acesso Vitalicio',
+          title: 'Planta Pro - Acesso Vitalicio',
           description: 'Todas as funcionalidades PRO sem mensalidade.',
           quantity: 1,
           currency_id: 'BRL',
           unit_price: 99.90,
         }],
         payer: { email },
-        payment_methods: {
-          excluded_payment_types: [],
-        },
         back_urls: {
           success: appUrl + '/payment-success',
           failure: appUrl + '/pricing',
           pending: appUrl + '/payment-success',
         },
-        auto_approve: true,
         auto_return: 'approved',
         external_reference: userId,
         notification_url: appUrl + '/api/mp-webhook',

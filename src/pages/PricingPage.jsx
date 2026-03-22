@@ -42,7 +42,7 @@ export default function PricingPage() {
           fontSize:11, fontFamily:'monospace', letterSpacing:2,
           padding:'4px 12px', borderRadius:20, marginBottom:12 }}>PLANOS</div>
         <h1 style={{ fontSize:28, fontWeight:800, marginBottom:8 }}>Escolha seu plano</h1>
-        <p style={{ color:'var(--text2)', fontSize:14 }}>Comece grátis. Upgrade quando precisar.</p>
+        <p style={{ color:'var(--text2)', fontSize:14 }}>Comece gratis. Upgrade quando precisar.</p>
       </div>
 
       <div style={{ display:'flex', flexDirection:'column', gap:16, width:'100%', maxWidth:440 }}>
@@ -54,10 +54,10 @@ export default function PricingPage() {
             <span style={{ fontSize:13, color:'var(--text2)' }}>/ sempre</span>
           </div>
           <ul style={{ listStyle:'none', display:'flex', flexDirection:'column', gap:10, marginBottom:24 }}>
-            <Feature ok   text="Ferramentas: Parede e Cômodo" />
-            <Feature ok   text="Grade e snap automático" />
+            <Feature ok   text="Ferramentas: Parede e Comodo" />
+            <Feature ok   text="Grade e snap automatico" />
             <Feature ok   text="Desfazer / refazer" />
-            <Feature      text="Máx. 10 elementos" />
+            <Feature      text="Max. 10 elementos" />
             <Feature      text="Sem exportar PNG" />
             <Feature      text="Sem porta, janela, escada, texto" />
           </ul>
@@ -69,4 +69,53 @@ export default function PricingPage() {
           )}
         </div>
 
-        <div style={{ position:'relative', background:'var(-
+        <div style={{ position:'relative', background:'var(--surface)',
+          border:'1px solid rgba(232,255,71,0.3)', borderRadius:20, padding:'28px 24px', overflow:'hidden' }}>
+          <div style={{ position:'absolute', top:-60, right:-60, width:180, height:180,
+            background:'radial-gradient(circle, rgba(232,255,71,0.12) 0%, transparent 70%)',
+            pointerEvents:'none' }} />
+
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+            <span style={{ fontSize:14, fontWeight:800, color:'var(--accent)' }}>PRO</span>
+            <div style={{ background:'var(--accent)', color:'#0f0f12', fontSize:9,
+              fontWeight:800, fontFamily:'monospace', padding:'2px 8px', borderRadius:20 }}>POPULAR</div>
+          </div>
+          <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:4 }}>
+            <span style={{ fontSize:32, fontWeight:800, color:'var(--accent)' }}>R$ 99,90</span>
+            <span style={{ fontSize:13, color:'var(--text2)' }}>unica vez</span>
+          </div>
+          <div style={{ fontSize:11, color:'var(--accent)', fontFamily:'monospace',
+            letterSpacing:0.5, marginBottom:20 }}>ACESSO VITALICIO - SEM MENSALIDADE</div>
+
+          <ul style={{ listStyle:'none', display:'flex', flexDirection:'column', gap:10, marginBottom:24 }}>
+            <Feature ok pro text="Tudo do plano Free" />
+            <Feature ok pro text="Elementos ilimitados" />
+            <Feature ok pro text="Exportar PNG em alta qualidade" />
+            <Feature ok pro text="Porta com arco de abertura" />
+            <Feature ok pro text="Janelas com detalhes" />
+            <Feature ok pro text="Escadas com degraus" />
+            <Feature ok pro text="Linha de medida / cota" />
+            <Feature ok pro text="Texto / etiqueta de comodos" />
+          </ul>
+
+          {isPro
+            ? <div style={{ textAlign:'center', padding:12, background:'rgba(232,255,71,0.1)',
+                border:'1px solid rgba(232,255,71,0.3)', borderRadius:12, fontSize:13,
+                fontWeight:700, color:'var(--accent)' }}>Voce e PRO!</div>
+            : <button onClick={handleUpgrade} disabled={busy} style={{
+                width:'100%', padding:14, background:'var(--accent)', border:'none',
+                borderRadius:12, color:'#0f0f12', fontSize:14, fontWeight:800,
+                cursor:'pointer', opacity: busy ? 0.7 : 1 }}>
+                {busy ? 'Aguarde...' : 'Comprar acesso vitalicio'}
+              </button>
+          }
+          {error && <p style={{ color:'var(--accent3)', fontSize:12, marginTop:8, textAlign:'center' }}>{error}</p>}
+        </div>
+      </div>
+
+      <p style={{ marginTop:28, textAlign:'center', fontSize:12, color:'var(--text2)', lineHeight:1.7 }}>
+        Pagamento unico e seguro via Stripe. Pague uma vez, use para sempre.
+      </p>
+    </div>
+  )
+}

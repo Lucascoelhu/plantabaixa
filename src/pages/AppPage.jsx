@@ -387,4 +387,252 @@ export default function AppPage() {
         )}
       </div>
 
-      <div style={{background:'var(--surface)',borderTop:'1px solid var(--bord
+      <div style={{background:'var(--surface)',borderTop:'1px solid var(--border)',padding:'10px 12px',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <span style={labelStyle}>Esp.</span>
+          <input type="range" min="2" max="30" value={thickness} style={{width:60}}
+            onChange={e=>setThick(+e.target.value)}/>
+          <span style={{...labelStyle,color:'var(--accent2)',fontFamily:'monospace',minWidth:16}}>{thickness}</span>
+          <span style={{...labelStyle,marginLeft:4}}>Cor</span>
+          {['#3a3a50','#5a4a3a','#2a4a3a','#4a2a2a','#2a3a5a','#e8ff47'].map(c=>(
+            <div key={c} onClick={()=>setColor(c)} style={{width:18,height:18,borderRadius:5,background:c,cursor:'pointer',flexShrink:0,
+              border:'2px solid '+(color===c?'var(--accent)':'transparent'),transform:color===c?'scale(1.2)':'scale(1)'}}/>
+          ))}
+          <span style={{...labelStyle,marginLeft:4}}>Snap</span>
+          <input type="checkbox" checked={snapOn} onChange={e=>setSnapOn(e.target.checked)}
+            style={{width:14,height:14,accentColor:'var(--accent)'}}/>
+          <button onClick={()=>setFreeMode(f=>!f)} style={{
+            padding:'3px 8px',borderRadius:8,fontSize:10,fontFamily:'monospace',
+            border:'1px solid',cursor:'pointer',flexShrink:0,
+            background:freeMode?'rgba(255,107,71,0.2)':'rgba(232,255,71,0.1)',
+            color:freeMode?'var(--accent3)':'var(--accent)',
+            borderColor:freeMode?'var(--accent3)':'var(--accent)',
+          }}>{freeMode?'LIVRE':'RETO'}</button>
+          <button onClick={undo} style={iconBtnStyle}>↩</button>
+          <button onClick={doExport} style={iconBtnStyle}>↗</button>
+          <button onClick={()=>{if(confirm('Limpar tudo?')){saveHistory();setElements([])}}}
+            style={{...iconBtnStyle,color:'var(--accent3)'}}>X</button>
+        </div>
+      </div>
+
+      <div style={{height:28,background:'var(--bg)',borderTop:'1px solid var(--border)',
+        display:'flex',alignItems:'center',padding:'0 12px',gap:14,flexShrink:0}}>
+        {[
+          {i:'T',v:tool.toUpperCase()},
+          {i:'L',v:freeMode?'LIVRE':'RETO'},
+          {i:'Z',v:Math.round(zoom*100)+'%'},
+          {i:'E',v:elements.length+(!isPro?'/10':'')+' el'},
+        ].map(s=>(
+          <span key={s.i} style={{display:'flex',alignItems:'center',gap:4,fontSize:10}}>
+            <span style={{color:'var(--text2)',fontFamily:'monospace'}}>{s.i}:</span>
+            <span style={{color:'var(--accent2)',fontFamily:'monospace'}}>{s.v}</span>
+          </span>
+        ))}
+      </div>
+
+      <div style={{position:'fixed',top:120,left:'50%',transform:'translateX(-50%)',
+        background:'rgba(232,255,71,0.12)',border:'1px solid var(--accent)',color:'var(--accent)',
+        fontFamily:'monospace',fontSize:11,padding:'7px 14px',borderRadius:20,
+        pointerEvents:'none',zIndex:500,whiteSpace:'nowrap',opacity:showHint?1:0,transition:'opacity 0.3s'}}>{hint}</div>
+
+      {upsellModal&&(
+        <div style={overlayStyle} onClick={()=>setUpsellModal(false)}>
+          <div style={modalStyle} onClick={e=>e.stopPropagation()}>
+            <div style={handleStyle}/>
+            <div style={{fontSize:36,textAlign:'center',marginBottom:12}}>!</div>
+            <h3 style={{fontSize:20,fontWeight:800,textAlign:'center',marginBottom:8}}>Recurso PRO</h3>
+            <p style={{color:'var(--text2)',fontSize:13,textAlign:'center',marginBottom:24,lineHeight:1.6}}>{upsellMsg}</p>
+            <button onClick={()=>{setUpsellModal(false);navigate('/pricing')}}
+              style={{...modalBtnStyle,background:'var(--accent)',color:'#0f0f12'}}>Ver planos</button>
+            <button onClick={()=>setUpsellModal(false)}
+              style={{...modalBtnStyle,background:'var(--surface2)',color:'var(--text2)',border:'1px solid var(--border)'}}>
+              Agora nao</button>
+          </div>
+        </div>
+      )}
+
+      {textModal&&(
+        <div style={overlayStyle} onClick={()=>setTextModal(false)}>
+          <div style={modalStyle} onClick={e=>e.stopPropagation()}>
+            <div style={handleStyle}/>
+            <h3 style={{fontSize:18,fontWeight:700,marginBottom:16}}>Adicionar Texto</h3>
+            <input placeholder="Ex: Sala de Estar" value={textVal}
+              onChange={e=>setTextVal(e.target.value)} autoFocus
+              style={{...inputStyle,marginBottom:10,width:'100%'}}/>
+            <div style={{display:'flex',gap:10,marginBottom:16}}>
+              <div style={{flex:1}}>
+                <p style={{fontSize:10,color:'var(--text2)',marginBottom:4}}>TAMANHO</p>
+                <input type="number" value={textSize} min={8} max={48}
+                  onChange={e=>setTextSize(+e.target.value)} style={{...inputStyle,width:'100%'}}/>
+              </div>
+              <div style={{flex:1}}>
+                <p style={{fontSize:10,color:'var(--text2)',marginBottom:4}}>COR</p>
+                <input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)}
+                  style={{...inputStyle,padding:4,height:40,width:'100%'}}/>
+              </div>
+            </div>
+            <button onClick={confirmText}
+              style={{...modalBtnStyle,background:'var(--accent)',color:'#0f0f12'}}>ADICIONAR</button>
+            <button onClick={()=>setTextModal(false)}
+              style={{...modalBtnStyle,background:'var(--surface2)',color:'var(--text2)',border:'1px solid var(--border)'}}>
+              Cancelar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const labelStyle    = {fontSize:10,fontFamily:'monospace',color:'var(--text2)',letterSpacing:0.5}
+const iconBtnStyle  = {width:30,height:30,background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:7,cursor:'pointer',color:'var(--text2)',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center'}
+const menuBtnStyle  = {display:'block',width:'100%',padding:'10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,color:'var(--text)',fontSize:13,cursor:'pointer',marginBottom:6,textAlign:'left'}
+const overlayStyle  = {position:'fixed',inset:0,background:'rgba(0,0,0,0.8)',zIndex:1000,display:'flex',alignItems:'flex-end',justifyContent:'center'}
+const modalStyle    = {background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'20px 20px 0 0',padding:20,width:'100%',maxWidth:460,maxHeight:'80dvh',overflowY:'auto'}
+const handleStyle   = {width:40,height:4,background:'var(--border)',borderRadius:2,margin:'0 auto 16px'}
+const modalBtnStyle = {display:'block',width:'100%',padding:14,border:'none',borderRadius:12,fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:8}
+const inputStyle    = {padding:'11px 13px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:10,color:'var(--text)',fontSize:14,outline:'none'}
+
+function drawGrid(ctx,W,H,pan,zoom){
+  const g=20,ox=-pan.x/zoom,oy=-pan.y/zoom,fw=W/zoom,fh=H/zoom
+  ctx.strokeStyle='rgba(255,255,255,0.04)';ctx.lineWidth=0.5
+  const sx=Math.floor(ox/g)*g,sy=Math.floor(oy/g)*g
+  for(let x=sx;x<ox+fw+g;x+=g){ctx.beginPath();ctx.moveTo(x,oy);ctx.lineTo(x,oy+fh);ctx.stroke()}
+  for(let y=sy;y<oy+fh+g;y+=g){ctx.beginPath();ctx.moveTo(ox,y);ctx.lineTo(ox+fw,y);ctx.stroke()}
+  ctx.strokeStyle='rgba(232,255,71,0.12)';ctx.lineWidth=1
+  ctx.beginPath();ctx.moveTo(0,oy);ctx.lineTo(0,oy+fh);ctx.stroke()
+  ctx.beginPath();ctx.moveTo(ox,0);ctx.lineTo(ox+fw,0);ctx.stroke()
+}
+
+function drawEl(ctx,el,scale){
+  const {type,x1,y1,x2,y2,color,thickness}=el
+  ctx.save()
+  if(type==='wall'){
+    ctx.strokeStyle=color||'#3a3a50';ctx.lineWidth=thickness||8;ctx.lineCap='square';ctx.lineJoin='miter'
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke()
+    drawMeasLabel(ctx,x1,y1,x2,y2,thickness||8,scale)
+  }else if(type==='room'){
+    const minX=Math.min(x1,x2),minY=Math.min(y1,y2),w=Math.abs(x2-x1),h=Math.abs(y2-y1)
+    ctx.fillStyle=el.fill||'rgba(232,255,71,0.08)';ctx.fillRect(minX,minY,w,h)
+    ctx.strokeStyle=color||'#3a3a50';ctx.lineWidth=thickness||8;ctx.strokeRect(minX,minY,w,h)
+    if(w>30&&h>30)drawRectMeasures(ctx,minX,minY,w,h,scale)
+  }else if(type==='door'){
+    ctx.strokeStyle='#e8a847';ctx.lineWidth=3
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke()
+    const len=Math.sqrt((x2-x1)**2+(y2-y1)**2),angle=Math.atan2(y2-y1,x2-x1)
+    ctx.strokeStyle='rgba(232,168,71,0.4)';ctx.lineWidth=1.5;ctx.setLineDash([4,4])
+    ctx.beginPath();ctx.arc(x1,y1,len,angle,angle-Math.PI/2,true);ctx.stroke();ctx.setLineDash([])
+    drawMeasLabel(ctx,x1,y1,x2,y2,3,scale)
+  }else if(type==='window'){
+    ctx.strokeStyle='#47c4ff';ctx.lineWidth=4
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke()
+    const angle=Math.atan2(y2-y1,x2-x1),len=Math.sqrt((x2-x1)**2+(y2-y1)**2),perp=angle+Math.PI/2
+    ctx.strokeStyle='rgba(71,196,255,0.6)';ctx.lineWidth=1
+    for(let t=0.2;t<=0.8;t+=0.3){
+      const px=x1+Math.cos(angle)*len*t,py=y1+Math.sin(angle)*len*t
+      ctx.beginPath();ctx.moveTo(px+Math.cos(perp)*4,py+Math.sin(perp)*4)
+      ctx.lineTo(px-Math.cos(perp)*4,py-Math.sin(perp)*4);ctx.stroke()
+    }
+    drawMeasLabel(ctx,x1,y1,x2,y2,4,scale)
+  }else if(type==='measure'){
+    ctx.strokeStyle='#e8ff47';ctx.lineWidth=1.5;ctx.setLineDash([6,4])
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([])
+    const angle=Math.atan2(y2-y1,x2-x1),perp=angle+Math.PI/2
+    ctx.lineWidth=2
+    for(const[px,py]of[[x1,y1],[x2,y2]]){
+      ctx.beginPath();ctx.moveTo(px+Math.cos(perp)*6,py+Math.sin(perp)*6)
+      ctx.lineTo(px-Math.cos(perp)*6,py-Math.sin(perp)*6);ctx.stroke()
+    }
+    drawMeasLabel(ctx,x1,y1,x2,y2,2,scale,'#e8ff47',true)
+  }else if(type==='stair'){
+    const minX=Math.min(x1,x2),minY=Math.min(y1,y2),w=Math.abs(x2-x1),h=Math.abs(y2-y1)
+    ctx.strokeStyle=color||'#8888a0';ctx.lineWidth=1;ctx.strokeRect(minX,minY,w,h)
+    const horiz=w>h,steps=Math.max(3,Math.round(horiz?w/15:h/15))
+    ctx.lineWidth=0.8
+    for(let i=1;i<steps;i++){
+      ctx.beginPath()
+      if(horiz){const sx=minX+w*i/steps;ctx.moveTo(sx,minY);ctx.lineTo(sx,minY+h)}
+      else{const sy=minY+h*i/steps;ctx.moveTo(minX,sy);ctx.lineTo(minX+w,sy)}
+      ctx.stroke()
+    }
+    ctx.strokeStyle='#e8ff47';ctx.lineWidth=1.5
+    const ax=minX+w/2,ay1=minY+6,ay2=minY+h-6
+    ctx.beginPath();ctx.moveTo(ax,ay1);ctx.lineTo(ax,ay2)
+    ctx.moveTo(ax-4,ay2-6);ctx.lineTo(ax,ay2);ctx.lineTo(ax+4,ay2-6);ctx.stroke()
+  }else if(type==='text'){
+    ctx.font=(el.size||14)+'px Syne,sans-serif'
+    ctx.fillStyle=el.textColor||'#f0f0f5';ctx.textAlign='left'
+    ctx.fillText(el.text||'',el.x,el.y)
+  }
+  ctx.restore()
+}
+
+function drawMeasLabel(ctx,x1,y1,x2,y2,thick,scale,col,force){
+  const dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy)
+  if(len<20&&!force)return
+  const m=(len*scale).toFixed(2)+'m',mx=(x1+x2)/2,my=(y1+y2)/2
+  const angle=Math.atan2(dy,dx),perp=angle-Math.PI/2,off=thick/2+10
+  ctx.save();ctx.translate(mx+Math.cos(perp)*off,my+Math.sin(perp)*off)
+  if(Math.abs(angle)>Math.PI/2)ctx.rotate(angle+Math.PI);else ctx.rotate(angle)
+  ctx.font='bold 10px monospace';const tw=ctx.measureText(m).width
+  ctx.fillStyle='rgba(15,15,18,0.85)';ctx.fillRect(-tw/2-3,-9,tw+6,13)
+  ctx.fillStyle=col||'#e8ff47';ctx.textAlign='center';ctx.fillText(m,0,0)
+  ctx.restore()
+}
+
+function drawRectMeasures(ctx,minX,minY,w,h,scale){
+  const mw=(w*scale).toFixed(2)+'m',mh=(h*scale).toFixed(2)+'m'
+  ctx.font='bold 10px monospace'
+  const tww=ctx.measureText(mw).width
+  ctx.fillStyle='rgba(15,15,18,0.85)';ctx.fillRect(minX+w/2-tww/2-3,minY-14,tww+6,13)
+  ctx.fillStyle='#e8ff47';ctx.textAlign='center';ctx.fillText(mw,minX+w/2,minY-4)
+  ctx.save();ctx.translate(minX+w+14,minY+h/2);ctx.rotate(Math.PI/2)
+  const twh=ctx.measureText(mh).width
+  ctx.fillStyle='rgba(15,15,18,0.85)';ctx.fillRect(-twh/2-3,-12,twh+6,13)
+  ctx.fillStyle='#e8ff47';ctx.fillText(mh,0,0);ctx.restore()
+}
+
+function hitTest(elements,x,y,zoom){
+  const threshold=12/zoom
+  for(let i=elements.length-1;i>=0;i--){
+    const el=elements[i]
+    if(el.type==='text'){if(Math.abs(x-el.x)<50&&Math.abs(y-el.y)<20)return el}
+    else if(el.type==='room'){
+      const minX=Math.min(el.x1,el.x2),minY=Math.min(el.y1,el.y2)
+      if(x>=minX&&x<=minX+Math.abs(el.x2-el.x1)&&y>=minY&&y<=minY+Math.abs(el.y2-el.y1))return el
+    }else if(el.x1!==undefined){if(segDist(x,y,el.x1,el.y1,el.x2,el.y2)<threshold)return el}
+  }
+  return null
+}
+
+function segDist(px,py,x1,y1,x2,y2){
+  const dx=x2-x1,dy=y2-y1,len2=dx*dx+dy*dy
+  if(!len2)return Math.sqrt((px-x1)**2+(py-y1)**2)
+  const t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/len2))
+  return Math.sqrt((px-(x1+t*dx))**2+(py-(y1+t*dy))**2)
+}
+
+function makeEl(type,x1,y1,x2,y2,color,thickness,colorIdx){
+  const base={type,x1,y1,x2,y2,color,thickness}
+  return type==='room'?{...base,fill:ROOM_COLORS[colorIdx%ROOM_COLORS.length]}:base
+}
+
+function exportPNG(elements,scale){
+  const pad=60;let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity
+  elements.forEach(el=>{
+    if(el.x1!==undefined){minX=Math.min(minX,el.x1,el.x2);minY=Math.min(minY,el.y1,el.y2);maxX=Math.max(maxX,el.x1,el.x2);maxY=Math.max(maxY,el.y1,el.y2)}
+    else if(el.x!==undefined){minX=Math.min(minX,el.x);minY=Math.min(minY,el.y);maxX=Math.max(maxX,el.x+100);maxY=Math.max(maxY,el.y+30)}
+  })
+  if(minX===Infinity)return
+  const W=maxX-minX+pad*2,H=maxY-minY+pad*2
+  const exp=document.createElement('canvas');exp.width=W*2;exp.height=H*2
+  const ec=exp.getContext('2d');ec.scale(2,2);ec.fillStyle='#0f0f12';ec.fillRect(0,0,W,H)
+  ec.strokeStyle='rgba(255,255,255,0.03)';ec.lineWidth=0.5
+  for(let x=0;x<W;x+=20){ec.beginPath();ec.moveTo(x,0);ec.lineTo(x,H);ec.stroke()}
+  for(let y=0;y<H;y+=20){ec.beginPath();ec.moveTo(0,y);ec.lineTo(W,y);ec.stroke()}
+  ec.save();ec.translate(pad-minX,pad-minY)
+  const rooms=elements.filter(e=>e.type==='room'),rest=elements.filter(e=>e.type!=='room')
+  ;[...rooms,...rest].forEach(el=>drawEl(ec,el,scale))
+  ec.restore();ec.fillStyle='rgba(232,255,71,0.4)';ec.font='bold 10px monospace'
+  ec.fillText('PLANTA PRO',12,H-8)
+  const a=document.createElement('a');a.download='planta-baixa.png';a.href=exp.toDataURL();a.click()
+}

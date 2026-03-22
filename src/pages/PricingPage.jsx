@@ -135,7 +135,7 @@ export default function PricingPage() {
           </div>
 
           <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:4 }}>
-            <span style={{ fontSize:32, fontWeight:800, color:'var(--accent)' }}>R$ 99,90</span>
+            <span style={{ fontSize:32, fontWeight:800, color:'var(--accent)' }}>R$ 9,90</span>
             <span style={{ fontSize:13, color:'var(--text2)' }}>unica vez</span>
           </div>
           <div style={{ fontSize:11, color:'var(--accent)', fontFamily:'monospace',

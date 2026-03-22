@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { createCheckoutSession } from '../lib/mercadopago';
+import { createCheckoutSession } from '../lib/payment'
 
 export default function PricingPage() {
   const { user, isPro } = useAuth()
@@ -21,19 +21,19 @@ export default function PricingPage() {
     <li style={{ display:'flex', alignItems:'center', gap:10, fontSize:13,
       color: ok ? 'var(--text)' : 'var(--text2)', opacity: ok ? 1 : 0.5 }}>
       <span style={{ color: ok ? (pro ? 'var(--accent)' : '#47ff8a') : 'var(--text2)', fontSize:12, flexShrink:0 }}>
-        {ok ? (pro ? '⚡' : '✓') : '✕'}
+        {ok ? 'OK' : 'X'}
       </span>
       {text}
     </li>
   )
 
   return (
-    <div style={{ minHeight:'100dvh', background:'var(--bg)', padding:'20px 16px 40px',
-      overflowY:'auto', display:'flex', flexDirection:'column', alignItems:'center' }}>
+    <div style={{ height:'100dvh', background:'var(--bg)', overflowY:'auto',
+      display:'flex', flexDirection:'column', alignItems:'center', padding:'20px 16px 60px' }}>
 
       <button onClick={() => navigate('/app')} style={{ alignSelf:'flex-start', background:'none',
         border:'none', color:'var(--text2)', fontSize:13, cursor:'pointer', marginBottom:24 }}>
-        ← Voltar ao app
+        Voltar ao app
       </button>
 
       <div style={{ textAlign:'center', marginBottom:32 }}>
@@ -55,8 +55,9 @@ export default function PricingPage() {
           </div>
           <ul style={{ listStyle:'none', display:'flex', flexDirection:'column', gap:10, marginBottom:24 }}>
             <Feature ok   text="Ferramentas: Parede e Comodo" />
-            <Feature ok   text="Grade e snap automatico" />
+            <Feature ok   text="Grade, snap e linhas retas" />
             <Feature ok   text="Desfazer / refazer" />
+            <Feature ok   text="Botao mover tela" />
             <Feature      text="Max. 10 elementos" />
             <Feature      text="Sem exportar PNG" />
             <Feature      text="Sem porta, janela, escada, texto" />
@@ -80,12 +81,21 @@ export default function PricingPage() {
             <div style={{ background:'var(--accent)', color:'#0f0f12', fontSize:9,
               fontWeight:800, fontFamily:'monospace', padding:'2px 8px', borderRadius:20 }}>POPULAR</div>
           </div>
+
           <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:4 }}>
             <span style={{ fontSize:32, fontWeight:800, color:'var(--accent)' }}>R$ 99,90</span>
             <span style={{ fontSize:13, color:'var(--text2)' }}>unica vez</span>
           </div>
           <div style={{ fontSize:11, color:'var(--accent)', fontFamily:'monospace',
-            letterSpacing:0.5, marginBottom:20 }}>ACESSO VITALICIO - SEM MENSALIDADE</div>
+            letterSpacing:0.5, marginBottom:16 }}>ACESSO VITALICIO - SEM MENSALIDADE</div>
+
+          <div style={{ display:'flex', gap:8, marginBottom:20 }}>
+            {['Cartao', 'PIX', 'Boleto'].map(m => (
+              <div key={m} style={{ padding:'4px 10px', background:'var(--surface2)',
+                border:'1px solid var(--border)', borderRadius:8,
+                fontSize:11, color:'var(--text2)', fontFamily:'monospace' }}>{m}</div>
+            ))}
+          </div>
 
           <ul style={{ listStyle:'none', display:'flex', flexDirection:'column', gap:10, marginBottom:24 }}>
             <Feature ok pro text="Tudo do plano Free" />
@@ -114,7 +124,9 @@ export default function PricingPage() {
       </div>
 
       <p style={{ marginTop:28, textAlign:'center', fontSize:12, color:'var(--text2)', lineHeight:1.7 }}>
-        Pagamento unico e seguro via Stripe. Pague uma vez, use para sempre.
+        Pagamento unico e seguro via Mercado Pago.<br/>
+        Aceita cartao, PIX e boleto.<br/>
+        Pague uma vez, use para sempre.
       </p>
     </div>
   )

@@ -155,7 +155,7 @@ export default function PricingPage() {
           {isPro ? (
             <div style={{ textAlign:'center', padding:12, background:'rgba(232,255,71,0.1)',
               border:'1px solid rgba(232,255,71,0.3)', borderRadius:12, fontSize:13,
-              fontWeight:700, color:'var(--accent)' }}>Voce e PRO!</div>
+              fontWeight:700, color:'var(--accent)' }}>Voce é PRO!</div>
           ) : (
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               {/* Cartao / Boleto */}
@@ -232,7 +232,7 @@ export default function PricingPage() {
             ) : pixData ? (
               <>
                 <h3 style={{ fontSize:18, fontWeight:800, marginBottom:4, textAlign:'center' }}>
-                  Pague R$ 9,90 via PIX
+                  Pague R$ 19,90 via PIX
                 </h3>
                 <p style={{ fontSize:12, color:'var(--text2)', textAlign:'center', marginBottom:20 }}>
                   Escaneie o QR Code ou copie o codigo abaixo

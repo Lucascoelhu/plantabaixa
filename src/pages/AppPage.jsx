@@ -11,7 +11,7 @@ const ROOM_COLORS = [
   'rgba(200,71,255,0.08)','rgba(255,200,71,0.08)',
 ]
 const SCALE = 0.02
-const GRID  = 20
+const GRID  = 1
 
 export default function AppPage() {
   const { user, isPro, logout } = useAuth()

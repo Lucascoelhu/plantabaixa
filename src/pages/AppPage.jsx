@@ -56,6 +56,7 @@ export default function AppPage() {
   const [continueModal, setContinueModal] = useState(false)
   const [continuePending, setContinuePending] = useState(null)
   const [accumulatedLength, setAccumulatedLength] = useState(0)
+  const [resizeHandle, setResizeHandle] = useState(null) // {el, handle: 'n'|'s'|'e'|'w'|'ne'|'nw'|'se'|'sw'}
   const [sizeModal, setSizeModal] = useState(false)
   const [sizePending, setSizePending] = useState(null)
   const [doorWidth, setDoorWidth] = useState(0.80)
@@ -63,7 +64,7 @@ export default function AppPage() {
   const hintTimer = useRef(null)
 
   const stateRef = useRef({})
-  stateRef.current = { tool, color, thickness, freeMode, user, isPro, roomColorIdx, pan, zoom, elements, lastWallEnd, accumulatedLength }
+  stateRef.current = { tool, color, thickness, freeMode, user, isPro, roomColorIdx, pan, zoom, elements, lastWallEnd, accumulatedLength, resizeHandle, selectedEl }
 
   function toast(msg) {
     setHint(msg); setShowHint(true)
@@ -247,9 +248,24 @@ export default function AppPage() {
       if (s.tool === 'text') { setTextPending(pos); setTextModal(true); return }
       if (s.tool === 'select') {
         const el = hitTest(s.elements, pos.x, pos.y, s.zoom)
+
+        // Check if clicking a resize handle on selected room
+        if (s.selectedEl && s.selectedEl.type === 'room') {
+          const handle = getResizeHandle(s.selectedEl, pos.x, pos.y, s.zoom)
+          if (handle) {
+            drawRef.current.dragEl = s.selectedEl
+            drawRef.current.resizeHandle = handle
+            drawRef.current.dragOff = { x: pos.x, y: pos.y }
+            drawRef.current.origEl = { ...s.selectedEl }
+            return
+          }
+        }
+
         setSelectedEl(el || null)
+        setResizeHandle(null)
         if (el) {
           drawRef.current.dragEl = el
+          drawRef.current.resizeHandle = null
           drawRef.current.dragOff = {
             x: pos.x - (el.x1 ?? el.x ?? 0),
             y: pos.y - (el.y1 ?? el.y ?? 0),
@@ -263,8 +279,20 @@ export default function AppPage() {
         return
       }
       drawRef.current.active = true
-      drawRef.current.startX = pos.x
-      drawRef.current.startY = pos.y
+      // Magnetic snap: se comecar perto do fim de uma parede, gruda
+      let snapX = pos.x, snapY = pos.y
+      if (s.tool === 'wall') {
+        const MAGNET = 30 / s.zoom
+        for (const el of s.elements) {
+          if (el.type !== 'wall') continue
+          for (const [ex, ey] of [[el.x1,el.y1],[el.x2,el.y2]]) {
+            const d = Math.sqrt((pos.x-ex)**2 + (pos.y-ey)**2)
+            if (d < MAGNET) { snapX = ex; snapY = ey; break }
+          }
+        }
+      }
+      drawRef.current.startX = snapX
+      drawRef.current.startY = snapY
     }
 
     function onMove(e) {
@@ -285,6 +313,23 @@ export default function AppPage() {
       if (s.tool === 'select' && drawRef.current.dragEl) {
         const pos = getPos(e)
         const el = drawRef.current.dragEl
+
+        // Resize room
+        if (drawRef.current.resizeHandle && el.type === 'room') {
+          const orig = drawRef.current.origEl
+          const dx = pos.x - drawRef.current.dragOff.x
+          const dy = pos.y - drawRef.current.dragOff.y
+          const h = drawRef.current.resizeHandle
+          let {x1,y1,x2,y2} = orig
+          if (h.includes('n')) y1 = orig.y1 + dy
+          if (h.includes('s')) y2 = orig.y2 + dy
+          if (h.includes('w')) x1 = orig.x1 + dx
+          if (h.includes('e')) x2 = orig.x2 + dx
+          setElements(prev => prev.map(e => e !== el ? e : {...e, x1, y1, x2, y2}))
+          setSelectedEl(prev => ({...prev, x1, y1, x2, y2}))
+          return
+        }
+
         const dx = pos.x - drawRef.current.dragOff.x
         const dy = pos.y - drawRef.current.dragOff.y
         const mw = (el.x2 ?? 0) - (el.x1 ?? el.x ?? 0)
@@ -320,6 +365,8 @@ export default function AppPage() {
     function onUp(e) {
       if (drawRef.current.pinching) return
       drawRef.current.dragEl = null
+      drawRef.current.resizeHandle = null
+      drawRef.current.origEl = null
       if (drawRef.current.panning) {
         drawRef.current.panning = false
         drawRef.current.pointerDown = false
@@ -341,23 +388,15 @@ export default function AppPage() {
         setUpsellModal(true); clearOverlay(); return
       }
 
-      // Wall: check if continuing
-      if (s.tool === 'wall' && s.lastWallEnd) {
-        const distFromLast = Math.sqrt(
-          (drawRef.current.startX - s.lastWallEnd.x)**2 +
-          (drawRef.current.startY - s.lastWallEnd.y)**2
-        )
-        if (distFromLast < 40) {
-          const newLen = Math.sqrt(dx*dx+dy*dy)
-          setContinuePending({
-            x1: drawRef.current.startX, y1: drawRef.current.startY,
-            x2: snapped.x, y2: snapped.y,
-            color: s.color, thickness: s.thickness,
-          })
-          setAccumulatedLength(s.accumulatedLength + newLen)
-          setContinueModal(true)
-          clearOverlay()
-          return
+      // Magnetic snap no ponto final tambem
+      if (s.tool === 'wall') {
+        const MAGNET = 30 / s.zoom
+        for (const el of s.elements) {
+          if (el.type !== 'wall') continue
+          for (const [ex, ey] of [[el.x1,el.y1],[el.x2,el.y2]]) {
+            const d = Math.sqrt((snapped.x-ex)**2 + (snapped.y-ey)**2)
+            if (d < MAGNET) { snapped.x = ex; snapped.y = ey; break }
+          }
         }
       }
 
@@ -431,10 +470,39 @@ export default function AppPage() {
     ;[...rooms, ...rest].forEach(el => drawEl(ctx, el, SCALE))
     if (selectedEl) {
       ctx.strokeStyle = 'rgba(71,196,255,0.9)'
-      ctx.lineWidth = 2; ctx.setLineDash([6,4])
-      if (selectedEl.x1 !== undefined) {
+      ctx.lineWidth = 2 / zoom; ctx.setLineDash([6/zoom, 4/zoom])
+
+      if (selectedEl.type === 'room') {
+        // Draw dashed border
+        const minX=Math.min(selectedEl.x1,selectedEl.x2)
+        const minY=Math.min(selectedEl.y1,selectedEl.y2)
+        const w=Math.abs(selectedEl.x2-selectedEl.x1)
+        const h=Math.abs(selectedEl.y2-selectedEl.y1)
+        ctx.strokeRect(minX-2/zoom, minY-2/zoom, w+4/zoom, h+4/zoom)
+        ctx.setLineDash([])
+
+        // Draw resize handles
+        const hs = 8/zoom
+        const handles = [
+          {x:minX,     y:minY,     id:'nw'},
+          {x:minX+w/2, y:minY,     id:'n'},
+          {x:minX+w,   y:minY,     id:'ne'},
+          {x:minX+w,   y:minY+h/2, id:'e'},
+          {x:minX+w,   y:minY+h,   id:'se'},
+          {x:minX+w/2, y:minY+h,   id:'s'},
+          {x:minX,     y:minY+h,   id:'sw'},
+          {x:minX,     y:minY+h/2, id:'w'},
+        ]
+        handles.forEach(h => {
+          ctx.fillStyle = 'var(--accent2, #47c4ff)'
+          ctx.fillRect(h.x-hs/2, h.y-hs/2, hs, hs)
+          ctx.strokeStyle = '#0f0f12'
+          ctx.lineWidth = 1/zoom
+          ctx.strokeRect(h.x-hs/2, h.y-hs/2, hs, hs)
+        })
+      } else if (selectedEl.x1 !== undefined) {
         for (const [px,py] of [[selectedEl.x1,selectedEl.y1],[selectedEl.x2,selectedEl.y2]]) {
-          ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI*2); ctx.stroke()
+          ctx.beginPath(); ctx.arc(px, py, 8/zoom, 0, Math.PI*2); ctx.stroke()
         }
       }
       ctx.setLineDash([])
@@ -1084,6 +1152,27 @@ function drawRectMeasures(ctx,minX,minY,w,h,scale){
   ctx.fillRect(-twh/2-2,-10,twh+4,10)
   ctx.fillStyle='rgba(232,255,71,0.65)'
   ctx.fillText(mh,0,0);ctx.restore()
+}
+
+function getResizeHandle(el, x, y, zoom) {
+  if (el.type !== 'room') return null
+  const minX=Math.min(el.x1,el.x2), minY=Math.min(el.y1,el.y2)
+  const w=Math.abs(el.x2-el.x1), h=Math.abs(el.y2-el.y1)
+  const hs = 12/zoom
+  const handles = [
+    {x:minX,     y:minY,     id:'nw'},
+    {x:minX+w/2, y:minY,     id:'n'},
+    {x:minX+w,   y:minY,     id:'ne'},
+    {x:minX+w,   y:minY+h/2, id:'e'},
+    {x:minX+w,   y:minY+h,   id:'se'},
+    {x:minX+w/2, y:minY+h,   id:'s'},
+    {x:minX,     y:minY+h,   id:'sw'},
+    {x:minX,     y:minY+h/2, id:'w'},
+  ]
+  for (const h of handles) {
+    if (Math.abs(x-h.x) < hs && Math.abs(y-h.y) < hs) return h.id
+  }
+  return null
 }
 
 function hitTest(elements,x,y,zoom){

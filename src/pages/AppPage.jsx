@@ -505,6 +505,69 @@ export default function AppPage() {
     const rooms = elements.filter(e => e.type === 'room')
     const rest  = elements.filter(e => e.type !== 'room')
     ;[...rooms, ...rest].forEach(el => drawEl(ctx, el, SCALE))
+
+    // Draw connected wall group totals
+    const walls = elements.filter(e => e.type === 'wall')
+    if (walls.length > 1) {
+      const SNAP = 20 // pixels to consider connected
+      const visited = new Set()
+      const groups = []
+      for (let i = 0; i < walls.length; i++) {
+        if (visited.has(i)) continue
+        const group = [i]
+        visited.add(i)
+        // BFS to find connected walls
+        const queue = [i]
+        while (queue.length) {
+          const wi = queue.shift()
+          const w = walls[wi]
+          for (let j = 0; j < walls.length; j++) {
+            if (visited.has(j)) continue
+            const w2 = walls[j]
+            // Check if any endpoints connect
+            const pts1 = [[w.x1,w.y1],[w.x2,w.y2]]
+            const pts2 = [[w2.x1,w2.y1],[w2.x2,w2.y2]]
+            let connected = false
+            for (const [ax,ay] of pts1) {
+              for (const [bx,by] of pts2) {
+                if (Math.sqrt((ax-bx)**2+(ay-by)**2) < SNAP) { connected=true; break }
+              }
+              if (connected) break
+            }
+            if (connected) { group.push(j); visited.add(j); queue.push(j) }
+          }
+        }
+        if (group.length > 1) groups.push(group)
+      }
+      // Draw total label for each group
+      groups.forEach(group => {
+        const total = group.reduce((sum, i) => {
+          const w = walls[i]
+          return sum + Math.sqrt((w.x2-w.x1)**2+(w.y2-w.y1)**2)
+        }, 0)
+        const totalM = (total * SCALE).toFixed(2) + 'm'
+        // Find center of group
+        const allX = group.flatMap(i => [walls[i].x1, walls[i].x2])
+        const allY = group.flatMap(i => [walls[i].y1, walls[i].y2])
+        const cx = (Math.min(...allX)+Math.max(...allX))/2
+        const cy = Math.min(...allY) - 22/zoom
+        // Draw background
+        ctx.font = 'bold 11px monospace'
+        const tw = ctx.measureText('Total: ' + totalM).width
+        ctx.fillStyle = 'rgba(232,255,71,0.15)'
+        ctx.beginPath()
+        ctx.roundRect(cx-tw/2-6, cy-12, tw+12, 18, 4)
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(232,255,71,0.5)'
+        ctx.lineWidth = 0.5
+        ctx.stroke()
+        // Draw text
+        ctx.fillStyle = 'rgba(232,255,71,0.9)'
+        ctx.textAlign = 'center'
+        ctx.fillText('Total: ' + totalM, cx, cy)
+      })
+    }
+
     if (selectedEl) {
       ctx.strokeStyle = 'rgba(71,196,255,0.9)'
       ctx.lineWidth = 2 / zoom; ctx.setLineDash([6/zoom, 4/zoom])
@@ -531,25 +594,21 @@ export default function AppPage() {
           {x:minX,     y:minY+h/2, id:'w'},
         ]
         handles.forEach(h => {
-          ctx.fillStyle = 'var(--accent2, #47c4ff)'
+          ctx.fillStyle = '#47c4ff'
           ctx.fillRect(h.x-hs/2, h.y-hs/2, hs, hs)
           ctx.strokeStyle = '#0f0f12'
           ctx.lineWidth = 1/zoom
           ctx.strokeRect(h.x-hs/2, h.y-hs/2, hs, hs)
         })
       } else if (selectedEl.x1 !== undefined) {
-        // Wall/line endpoints as draggable handles
         ctx.setLineDash([])
         for (const [px,py] of [[selectedEl.x1,selectedEl.y1],[selectedEl.x2,selectedEl.y2]]) {
-          // Outer circle
           ctx.strokeStyle = 'rgba(71,196,255,0.9)'
           ctx.lineWidth = 2/zoom
           ctx.beginPath(); ctx.arc(px, py, 10/zoom, 0, Math.PI*2); ctx.stroke()
-          // Inner fill
           ctx.fillStyle = 'rgba(71,196,255,0.3)'
           ctx.beginPath(); ctx.arc(px, py, 8/zoom, 0, Math.PI*2); ctx.fill()
         }
-        // Dashed line connecting endpoints
         ctx.strokeStyle = 'rgba(71,196,255,0.4)'
         ctx.lineWidth = 1/zoom
         ctx.setLineDash([4/zoom, 4/zoom])
@@ -790,14 +849,26 @@ export default function AppPage() {
 
         {activeTool && (
           <div style={{position:'absolute',bottom:14,left:14,
-            background:'rgba(15,15,18,0.85)',border:'1px solid var(--border)',
-            borderRadius:10,padding:'6px 10px',display:'flex',alignItems:'center',gap:6,
-            fontSize:11,color:'var(--text2)',fontFamily:'monospace',zIndex:10}}>
-            <span style={{fontSize:14}}>{activeTool.icon}</span>
-            <span>{activeTool.label}</span>
-            <span style={{color: freeMode?'var(--accent3)':'var(--accent)',fontSize:10}}>
-              {freeMode?'LIVRE':'RETO'}
-            </span>
+            display:'flex',flexDirection:'column',gap:6,zIndex:10}}>
+            {/* Desfazer — sempre visivel */}
+            <button onClick={undo} style={{
+              padding:'8px 14px',background:'var(--surface)',
+              border:'1px solid var(--border)',borderRadius:10,
+              color:'var(--text)',fontSize:13,cursor:'pointer',
+              display:'flex',alignItems:'center',gap:6,
+              boxShadow:'0 2px 10px rgba(0,0,0,0.4)',
+            }}>↩ <span style={{fontSize:11,fontFamily:'monospace'}}>Desfazer</span></button>
+            {/* Ferramenta ativa */}
+            <div style={{
+              background:'rgba(15,15,18,0.85)',border:'1px solid var(--border)',
+              borderRadius:10,padding:'6px 10px',display:'flex',alignItems:'center',gap:6,
+              fontSize:11,color:'var(--text2)',fontFamily:'monospace'}}>
+              <span style={{fontSize:14}}>{activeTool.icon}</span>
+              <span>{activeTool.label}</span>
+              <span style={{color: freeMode?'var(--accent3)':'var(--accent)',fontSize:10}}>
+                {freeMode?'LIVRE':'RETO'}
+              </span>
+            </div>
           </div>
         )}
 

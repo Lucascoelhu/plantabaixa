@@ -447,6 +447,7 @@ export default function AppPage() {
   }
   function undo() {
     if (!elements.length) return
+    saveHistory()
     setElements(prev => prev.slice(0, -1))
     toast('Ultimo elemento removido')
   }

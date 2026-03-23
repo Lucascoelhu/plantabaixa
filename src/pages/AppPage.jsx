@@ -52,15 +52,18 @@ export default function AppPage() {
   const [projects, setProjects]   = useState([])
   const [saveBusy, setSaveBusy]   = useState(false)
   const [roomColorIdx, setRoomColorIdx] = useState(0)
-  // Door/window size modal
+  const [lastWallEnd, setLastWallEnd] = useState(null)
+  const [continueModal, setContinueModal] = useState(false)
+  const [continuePending, setContinuePending] = useState(null)
+  const [accumulatedLength, setAccumulatedLength] = useState(0)
   const [sizeModal, setSizeModal] = useState(false)
-  const [sizePending, setSizePending] = useState(null) // {type, x1,y1,x2,y2}
+  const [sizePending, setSizePending] = useState(null)
   const [doorWidth, setDoorWidth] = useState(0.80)
   const [windowWidth, setWindowWidth] = useState(1.20)
   const hintTimer = useRef(null)
 
   const stateRef = useRef({})
-  stateRef.current = { tool, color, thickness, freeMode, user, isPro, roomColorIdx, pan, zoom, elements }
+  stateRef.current = { tool, color, thickness, freeMode, user, isPro, roomColorIdx, pan, zoom, elements, lastWallEnd, accumulatedLength }
 
   function toast(msg) {
     setHint(msg); setShowHint(true)
@@ -197,7 +200,6 @@ export default function AppPage() {
         drawRef.current.pinchDist = pd.dist
         drawRef.current.pinchMidX = pd.midX
         drawRef.current.pinchMidY = pd.midY
-        // Store pan origin for two-finger pan
         drawRef.current.panOrigin = { x: stateRef.current.pan.x, y: stateRef.current.pan.y }
       }
     }
@@ -205,14 +207,10 @@ export default function AppPage() {
     function onTouchMove(e) {
       if (e.touches.length === 2 && drawRef.current.pinching) {
         e.preventDefault()
-        const s = stateRef.current
         const pd = getPinchData(e.touches)
         const ratio = pd.dist / drawRef.current.pinchDist
-
-        // Two finger pan + pinch zoom
         const panDX = pd.midX - drawRef.current.pinchMidX
         const panDY = pd.midY - drawRef.current.pinchMidY
-
         setZoom(z => {
           const nz = Math.min(4, Math.max(0.2, z * ratio))
           setPan(p => ({
@@ -221,7 +219,6 @@ export default function AppPage() {
           }))
           return nz
         })
-
         drawRef.current.pinchDist = pd.dist
         drawRef.current.pinchMidX = pd.midX
         drawRef.current.pinchMidY = pd.midY
@@ -229,9 +226,7 @@ export default function AppPage() {
     }
 
     function onTouchEnd(e) {
-      if (e.touches.length < 2) {
-        drawRef.current.pinching = false
-      }
+      if (e.touches.length < 2) drawRef.current.pinching = false
     }
 
     function onDown(e) {
@@ -249,9 +244,7 @@ export default function AppPage() {
       }
 
       const pos = getPos(e)
-
       if (s.tool === 'text') { setTextPending(pos); setTextModal(true); return }
-
       if (s.tool === 'select') {
         const el = hitTest(s.elements, pos.x, pos.y, s.zoom)
         setSelectedEl(el || null)
@@ -264,13 +257,11 @@ export default function AppPage() {
         }
         return
       }
-
       if (s.tool === 'delete') {
         const el = hitTest(s.elements, pos.x, pos.y, s.zoom)
         if (el) { saveHistory(); setElements(prev => prev.filter(e => e !== el)); toast('Apagado') }
         return
       }
-
       drawRef.current.active = true
       drawRef.current.startX = pos.x
       drawRef.current.startY = pos.y
@@ -321,7 +312,6 @@ export default function AppPage() {
           x2: snapped.x, y2: snapped.y,
           color: s.color, thickness: s.thickness,
           fill: ROOM_COLORS[s.roomColorIdx % ROOM_COLORS.length],
-          doorWidth, windowWidth,
         }, SCALE)
         oc.restore()
       }
@@ -351,7 +341,27 @@ export default function AppPage() {
         setUpsellModal(true); clearOverlay(); return
       }
 
-      // Door and window: show size modal first
+      // Wall: check if continuing
+      if (s.tool === 'wall' && s.lastWallEnd) {
+        const distFromLast = Math.sqrt(
+          (drawRef.current.startX - s.lastWallEnd.x)**2 +
+          (drawRef.current.startY - s.lastWallEnd.y)**2
+        )
+        if (distFromLast < 40) {
+          const newLen = Math.sqrt(dx*dx+dy*dy)
+          setContinuePending({
+            x1: drawRef.current.startX, y1: drawRef.current.startY,
+            x2: snapped.x, y2: snapped.y,
+            color: s.color, thickness: s.thickness,
+          })
+          setAccumulatedLength(s.accumulatedLength + newLen)
+          setContinueModal(true)
+          clearOverlay()
+          return
+        }
+      }
+
+      // Door/window: size modal
       if (s.tool === 'door' || s.tool === 'window') {
         setSizePending({
           type: s.tool,
@@ -367,7 +377,14 @@ export default function AppPage() {
       saveHistory()
       const el = makeEl(s.tool, drawRef.current.startX, drawRef.current.startY,
         snapped.x, snapped.y, s.color, s.thickness, s.roomColorIdx)
-      if (el) { setElements(prev => [...prev, el]); if(s.tool==='room') setRoomColorIdx(i=>i+1) }
+      if (el) {
+        setElements(prev => [...prev, el])
+        if (s.tool === 'room') setRoomColorIdx(i => i+1)
+        if (s.tool === 'wall') {
+          setLastWallEnd({ x: snapped.x, y: snapped.y })
+          setAccumulatedLength(Math.sqrt(dx*dx+dy*dy))
+        }
+      }
       clearOverlay()
     }
 
@@ -387,19 +404,17 @@ export default function AppPage() {
       canvas.removeEventListener('touchmove', onTouchMove)
       canvas.removeEventListener('touchend', onTouchEnd)
     }
-  }, [doorWidth, windowWidth])
+  }, [])
 
   function confirmSize() {
     if (!sizePending) return
     saveHistory()
-    const el = {
+    setElements(prev => [...prev, {
       ...sizePending,
       doorWidth: sizePending.type === 'door' ? doorWidth : undefined,
       windowWidth: sizePending.type === 'window' ? windowWidth : undefined,
-    }
-    setElements(prev => [...prev, el])
-    setSizeModal(false)
-    setSizePending(null)
+    }])
+    setSizeModal(false); setSizePending(null)
     toast((sizePending.type === 'door' ? 'Porta' : 'Janela') + ' adicionada!')
   }
 
@@ -427,12 +442,13 @@ export default function AppPage() {
     ctx.restore()
   }
 
-  function saveHistory() { setHistory(h => [...h.slice(-49), elements.map(e => ({...e}))]) }
+  function saveHistory() {
+    setHistory(h => [...h.slice(-49), elements.map(e => ({...e}))])
+  }
   function undo() {
-    if (!history.length) return
-    setElements(history[history.length-1])
-    setHistory(h => h.slice(0,-1))
-    toast('Desfeito')
+    if (!elements.length) return
+    setElements(prev => prev.slice(0, -1))
+    toast('Ultimo elemento removido')
   }
 
   function doExport() {
@@ -460,7 +476,7 @@ export default function AppPage() {
   const ACTIONS = [
     {id:'pan',    icon:'✋', label:'Mover Tela', desc:'Move a tela (ou 2 dedos)'},
     {id:'select', icon:'↖',  label:'Editar',     desc:'Seleciona e move elementos'},
-    {id:'delete', icon:'✕',  label:'Apagar',     desc:'Apaga elementos'},
+    {id:'delete', icon:'🧹', label:'Borracha',   desc:'Toque num elemento para apagar'},
   ]
 
   const activeTool = [...TOOLS, ...ACTIONS].find(t => t && t.id === tool)
@@ -480,7 +496,6 @@ export default function AppPage() {
           <button onClick={()=>setSaveModal(true)} style={hdrBtn} title="Salvar projeto">💾</button>
           <button onClick={openLoadModal} style={hdrBtn} title="Carregar projeto">📂</button>
           <button onClick={()=>setHelpModal(true)} style={{...hdrBtn,fontSize:13,fontWeight:700,color:'var(--text2)'}} title="Ajuda">?</button>
-          {/* Plan badge */}
           <div onClick={()=>navigate('/pricing')} style={{
             padding:'4px 10px',borderRadius:20,fontSize:11,fontWeight:800,
             fontFamily:'monospace',cursor:'pointer',border:'2px solid',
@@ -488,7 +503,7 @@ export default function AppPage() {
               ? {background:'rgba(232,255,71,0.2)',color:'var(--accent)',borderColor:'var(--accent)',boxShadow:'0 0 8px rgba(232,255,71,0.3)'}
               : {background:'var(--surface2)',color:'var(--text2)',borderColor:'var(--border)'}
             )}}>
-            {isPro ? '⚡ PRO' : 'FREE'}
+            {isPro ? 'PRO' : 'FREE'}
           </div>
           <div onClick={()=>setUserMenu(m=>!m)} style={{width:32,height:32,borderRadius:'50%',
             background: isPro ? 'rgba(232,255,71,0.15)' : 'var(--surface2)',
@@ -511,11 +526,11 @@ export default function AppPage() {
               <div style={{padding:'6px 10px',background:'rgba(232,255,71,0.1)',
                 border:'1px solid rgba(232,255,71,0.3)',borderRadius:8,
                 fontSize:12,color:'var(--accent)',fontWeight:700,marginBottom:10,textAlign:'center'}}>
-                ⚡ Plano PRO Ativo
+                Plano PRO Ativo
               </div>
             )}
             <button onClick={()=>navigate('/pricing')} style={menuBtnStyle}>
-              {isPro ? 'Gerenciar plano' : '🚀 Fazer upgrade PRO'}
+              {isPro ? 'Gerenciar plano' : 'Fazer upgrade PRO'}
             </button>
             <button onClick={logout} style={{...menuBtnStyle,color:'var(--accent3)'}}>Sair</button>
           </div>
@@ -524,9 +539,7 @@ export default function AppPage() {
 
       {/* TOOLBAR */}
       <div style={{background:'var(--surface)',borderBottom:'1px solid var(--border)',flexShrink:0}}>
-
-        {/* Tool groups */}
-        <div style={{display:'flex',alignItems:'stretch',gap:0,padding:'6px 8px',
+        <div style={{display:'flex',alignItems:'stretch',padding:'6px 8px',
           overflowX:'auto',scrollbarWidth:'none',gap:6}}>
 
           {/* Drawing group */}
@@ -543,7 +556,7 @@ export default function AppPage() {
                     display:'flex',flexDirection:'column',alignItems:'center',
                     justifyContent:'center',gap:1,cursor:'pointer',
                     position:'relative',transition:'all 0.12s',flexShrink:0,
-                    borderColor: active ? 'var(--accent)' : locked ? 'var(--border)' : 'var(--border)',
+                    borderColor: active ? 'var(--accent)' : 'var(--border)',
                     background: active ? 'rgba(232,255,71,0.15)' : 'var(--surface2)',
                     color: active ? 'var(--accent)' : locked ? 'var(--text2)' : 'var(--text)',
                     opacity: locked ? 0.55 : 1,
@@ -563,7 +576,6 @@ export default function AppPage() {
             </div>
           </div>
 
-          {/* Divider */}
           <div style={{width:1,background:'var(--border)',flexShrink:0,alignSelf:'stretch',margin:'0 2px'}}/>
 
           {/* Action group */}
@@ -575,7 +587,7 @@ export default function AppPage() {
                 const active = tool === t.id
                 return (
                   <button key={t.id} onClick={()=>trySetTool(t.id)} title={t.desc} style={{
-                    width:52,height:46,border:'2px solid',borderRadius:10,
+                    width:54,height:46,border:'2px solid',borderRadius:10,
                     display:'flex',flexDirection:'column',alignItems:'center',
                     justifyContent:'center',gap:1,cursor:'pointer',
                     transition:'all 0.12s',flexShrink:0,
@@ -585,7 +597,7 @@ export default function AppPage() {
                     boxShadow: active ? '0 0 8px rgba(71,196,255,0.2)' : 'none',
                   }}>
                     <span style={{fontSize:15,lineHeight:1}}>{t.icon}</span>
-                    <span style={{fontSize:7,fontWeight:700,letterSpacing:0.3,textAlign:'center',lineHeight:1.2}}>{t.label}</span>
+                    <span style={{fontSize:7,fontWeight:700,textAlign:'center',lineHeight:1.2}}>{t.label}</span>
                   </button>
                 )
               })}
@@ -597,7 +609,6 @@ export default function AppPage() {
         <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 8px 6px',
           borderTop:'1px solid var(--border)',overflowX:'auto',scrollbarWidth:'none'}}>
 
-          {/* Line mode */}
           <div style={{display:'flex',background:'var(--surface2)',
             border:'1px solid var(--border)',borderRadius:8,overflow:'hidden',flexShrink:0}}>
             <button onClick={()=>setFreeMode(false)} style={{
@@ -614,13 +625,11 @@ export default function AppPage() {
             }}>LIVRE</button>
           </div>
 
-          {/* Thickness */}
           <span style={labelStyle}>Esp.</span>
           <input type="range" min="1" max="20" value={thickness} style={{width:50,flexShrink:0}}
             onChange={e=>setThick(+e.target.value)}/>
           <span style={{...labelStyle,color:'var(--accent2)',fontFamily:'monospace',minWidth:14,flexShrink:0}}>{thickness}</span>
 
-          {/* Colors */}
           {['#3a3a50','#5a4a3a','#2a4a3a','#4a2a2a','#2a3a5a','#e8ff47'].map(c=>(
             <div key={c} onClick={()=>setColor(c)} style={{
               width:18,height:18,borderRadius:5,background:c,cursor:'pointer',flexShrink:0,
@@ -629,12 +638,8 @@ export default function AppPage() {
           ))}
 
           <div style={{flex:1}}/>
-
-          {/* Undo */}
-          <button onClick={undo} style={actionBtn} title="Desfazer">↩</button>
-          {/* Export */}
+          <button onClick={undo} style={actionBtn} title="Desfazer (remove ultimo elemento)">↩</button>
           <button onClick={doExport} style={actionBtn} title="Exportar PNG">↗</button>
-          {/* Clear */}
           <button onClick={()=>{if(confirm('Limpar tudo?')){saveHistory();setElements([])}}}
             style={{...actionBtn,color:'var(--accent3)',borderColor:'rgba(255,107,71,0.3)'}}>✕</button>
         </div>
@@ -644,13 +649,10 @@ export default function AppPage() {
       <div ref={wrapRef} style={{flex:1,position:'relative',overflow:'hidden'}}>
         <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0}}/>
         <canvas ref={overlayRef} style={{position:'absolute',top:0,left:0,
-          touchAction:'none',
-          cursor: tool==='pan' ? 'grab' : tool==='delete' ? 'crosshair' : 'crosshair'}}/>
+          touchAction:'none',cursor: tool==='pan' ? 'grab' : 'crosshair'}}/>
 
-        {/* Zoom controls — direita */}
         <div style={{position:'absolute',bottom:14,right:14,display:'flex',
           flexDirection:'column',gap:4,zIndex:10}}>
-          {/* Mover tela — sempre visivel, acima do zoom */}
           <button onClick={()=>trySetTool('pan')} title="Mover tela" style={{
             width:44,height:44,borderRadius:12,
             background: tool==='pan' ? 'var(--accent)' : 'var(--surface)',
@@ -661,12 +663,11 @@ export default function AppPage() {
             boxShadow:'0 2px 10px rgba(0,0,0,0.5)',marginBottom:4,
           }}>✋</button>
           <button onClick={()=>setZoom(z=>Math.min(4,z*1.25))} style={zoomBtn}>+</button>
-          <button onClick={()=>setZoom(z=>Math.max(0.2,z/1.25))} style={zoomBtn}>−</button>
+          <button onClick={()=>setZoom(z=>Math.max(0.2,z/1.25))} style={zoomBtn}>-</button>
           <button onClick={()=>{setZoom(1);setPan({x:40,y:40})}}
             style={{...zoomBtn,fontSize:8,fontFamily:'monospace'}}>CTR</button>
         </div>
 
-        {/* Current tool indicator */}
         {activeTool && (
           <div style={{position:'absolute',bottom:14,left:14,
             background:'rgba(15,15,18,0.85)',border:'1px solid var(--border)',
@@ -680,7 +681,6 @@ export default function AppPage() {
           </div>
         )}
 
-        {/* Free limit */}
         {!isPro && elements.length >= 8 && (
           <div style={{position:'absolute',top:14,left:'50%',transform:'translateX(-50%)',
             background:'rgba(255,107,71,0.15)',border:'1px solid rgba(255,107,71,0.5)',
@@ -703,7 +703,7 @@ export default function AppPage() {
         <span style={statusItem}>Linha: <b style={{color: freeMode?'var(--accent3)':'var(--accent2)'}}>{freeMode?'Livre':'Reta'}</b></span>
         <span style={statusItem}>Zoom: <b style={{color:'var(--accent2)'}}>{Math.round(zoom*100)}%</b></span>
         <span style={statusItem}>Elem: <b style={{color:'var(--accent2)'}}>{elements.length}{!isPro?'/10':''}</b></span>
-        {isPro && <span style={{marginLeft:'auto',fontSize:10,color:'var(--accent)',fontFamily:'monospace',fontWeight:700}}>⚡ PRO</span>}
+        {isPro && <span style={{marginLeft:'auto',fontSize:10,color:'var(--accent)',fontFamily:'monospace',fontWeight:700}}>PRO</span>}
       </div>
 
       {/* HINT */}
@@ -713,17 +713,58 @@ export default function AppPage() {
         pointerEvents:'none',zIndex:500,whiteSpace:'nowrap',
         opacity:showHint?1:0,transition:'opacity 0.3s'}}>{hint}</div>
 
-      {/* SIZE MODAL (door/window) */}
+      {/* CONTINUE WALL MODAL */}
+      {continueModal && continuePending && (
+        <div style={overlayStyle} onClick={()=>setContinueModal(false)}>
+          <div style={modalStyle} onClick={e=>e.stopPropagation()}>
+            <div style={handleStyle}/>
+            <h3 style={{fontSize:18,fontWeight:800,marginBottom:8}}>Continuar parede?</h3>
+            <p style={{fontSize:13,color:'var(--text2)',marginBottom:16,lineHeight:1.6}}>
+              Esta parede comeca perto do fim da anterior.<br/>
+              Total acumulado: <b style={{color:'var(--accent)'}}>{(accumulatedLength * SCALE).toFixed(2)}m</b>
+            </p>
+            <button onClick={()=>{
+              saveHistory()
+              const el = makeEl('wall', continuePending.x1, continuePending.y1,
+                continuePending.x2, continuePending.y2, continuePending.color, continuePending.thickness, 0)
+              setElements(prev=>[...prev,el])
+              setLastWallEnd({x:continuePending.x2, y:continuePending.y2})
+              setContinueModal(false); setContinuePending(null)
+              toast('Total: ' + (accumulatedLength * SCALE).toFixed(2) + 'm')
+            }} style={{...modalBtnStyle,background:'var(--accent)',color:'#0f0f12'}}>
+              Sim, continuar parede
+            </button>
+            <button onClick={()=>{
+              saveHistory()
+              const el = makeEl('wall', continuePending.x1, continuePending.y1,
+                continuePending.x2, continuePending.y2, continuePending.color, continuePending.thickness, 0)
+              setElements(prev=>[...prev,el])
+              setLastWallEnd({x:continuePending.x2, y:continuePending.y2})
+              setAccumulatedLength(0)
+              setContinueModal(false); setContinuePending(null)
+              toast('Nova parede iniciada')
+            }} style={{...modalBtnStyle,background:'var(--surface2)',color:'var(--text)',border:'1px solid var(--border)'}}>
+              Nao, nova parede
+            </button>
+            <button onClick={()=>{
+              setContinueModal(false); setContinuePending(null)
+              setAccumulatedLength(0); setLastWallEnd(null)
+            }} style={{...modalBtnStyle,background:'var(--surface2)',color:'var(--text2)',border:'1px solid var(--border)'}}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SIZE MODAL */}
       {sizeModal && sizePending && (
         <div style={overlayStyle} onClick={()=>setSizeModal(false)}>
           <div style={modalStyle} onClick={e=>e.stopPropagation()}>
             <div style={handleStyle}/>
             <h3 style={{fontSize:18,fontWeight:800,marginBottom:4}}>
-              {sizePending.type==='door' ? '🚪 Tamanho da Porta' : '⬛ Tamanho da Janela'}
+              {sizePending.type==='door' ? 'Tamanho da Porta' : 'Tamanho da Janela'}
             </h3>
-            <p style={{fontSize:12,color:'var(--text2)',marginBottom:20}}>
-              Escolha a largura em metros
-            </p>
+            <p style={{fontSize:12,color:'var(--text2)',marginBottom:20}}>Escolha a largura em metros</p>
             <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:20}}>
               {(sizePending.type==='door'
                 ? [0.60, 0.70, 0.80, 0.90, 1.00, 1.20]
@@ -766,7 +807,7 @@ export default function AppPage() {
         <div style={overlayStyle} onClick={()=>setUpsellModal(false)}>
           <div style={modalStyle} onClick={e=>e.stopPropagation()}>
             <div style={handleStyle}/>
-            <div style={{fontSize:32,textAlign:'center',marginBottom:10}}>⚡</div>
+            <div style={{fontSize:32,textAlign:'center',marginBottom:10}}>!</div>
             <h3 style={{fontSize:18,fontWeight:800,textAlign:'center',marginBottom:8}}>Recurso PRO</h3>
             <p style={{color:'var(--text2)',fontSize:13,textAlign:'center',marginBottom:20,lineHeight:1.6}}>{upsellMsg}</p>
             <button onClick={()=>{setUpsellModal(false);navigate('/pricing')}}
@@ -813,7 +854,7 @@ export default function AppPage() {
         <div style={overlayStyle} onClick={()=>setSaveModal(false)}>
           <div style={modalStyle} onClick={e=>e.stopPropagation()}>
             <div style={handleStyle}/>
-            <h3 style={{fontSize:18,fontWeight:700,marginBottom:16}}>💾 Salvar Projeto</h3>
+            <h3 style={{fontSize:18,fontWeight:700,marginBottom:16}}>Salvar Projeto</h3>
             <input placeholder="Nome do projeto (ex: Casa Principal)"
               value={projectName} onChange={e=>setProjectName(e.target.value)} autoFocus
               style={{...inputStyle,marginBottom:16,width:'100%'}}/>
@@ -834,7 +875,7 @@ export default function AppPage() {
         <div style={overlayStyle} onClick={()=>setLoadModal(false)}>
           <div style={modalStyle} onClick={e=>e.stopPropagation()}>
             <div style={handleStyle}/>
-            <h3 style={{fontSize:18,fontWeight:700,marginBottom:16}}>📂 Meus Projetos</h3>
+            <h3 style={{fontSize:18,fontWeight:700,marginBottom:16}}>Meus Projetos</h3>
             {projects.length === 0
               ? <p style={{color:'var(--text2)',textAlign:'center',fontSize:13,marginBottom:16}}>
                   Nenhum projeto salvo ainda.
@@ -847,9 +888,7 @@ export default function AppPage() {
                       color:'var(--text)',fontSize:14,cursor:'pointer',textAlign:'left',
                       display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                       <span style={{fontWeight:600}}>{p.name}</span>
-                      <span style={{fontSize:11,color:'var(--text2)'}}>
-                        {p.elements?.length||0} elementos
-                      </span>
+                      <span style={{fontSize:11,color:'var(--text2)'}}>{p.elements?.length||0} elem</span>
                     </button>
                   ))}
                 </div>
@@ -877,22 +916,20 @@ export default function AppPage() {
               {icon:'⬛',  title:'Janela (PRO)', desc:'Arraste e escolha o tamanho. Inserida na parede com detalhes visuais.'},
               {icon:'📏', title:'Medida (PRO)',  desc:'Arraste para criar uma linha de cota e medir distancias em metros.'},
               {icon:'🪜', title:'Escada (PRO)',  desc:'Arraste para criar uma escada com degraus e seta indicando subida.'},
-              {icon:'T',  title:'Texto (PRO)',   desc:'Toque em qualquer lugar para adicionar uma etiqueta (nome do comodo, observacao etc).'},
-              {icon:'✋', title:'Mover Tela',    desc:'Arraste para navegar pelo canvas sem desenhar. Tambem funciona com 2 dedos (pinça) em qualquer modo.'},
-              {icon:'↖',  title:'Editar',        desc:'Toque num elemento para selecionar (aparece destaque azul) e arraste para mover de lugar.'},
-              {icon:'✕',  title:'Apagar',        desc:'Toque em qualquer elemento para remove-lo do canvas.'},
-              {icon:'RETO/LIVRE', title:'Modo de Linha', desc:'RETO: linhas sempre em angulo reto (horizontal ou vertical). LIVRE: qualquer direcao.'},
-              {icon:'↩',  title:'Desfazer',      desc:'Desfaz a ultima acao. Ate 50 acoes podem ser desfeitas.'},
-              {icon:'↗',  title:'PNG (PRO)',      desc:'Exporta a planta como imagem PNG em alta resolucao (2x).'},
-              {icon:'💾', title:'Salvar',         desc:'Salva o projeto atual na nuvem com um nome. Voce pode ter varios projetos salvos.'},
-              {icon:'📂', title:'Carregar',       desc:'Abre a lista de projetos salvos. Toque num projeto para carrega-lo.'},
-              {icon:'+/−',title:'Zoom',           desc:'Aumenta ou diminui o zoom. CTR centraliza a visao. Pinça com 2 dedos tambem faz zoom.'},
+              {icon:'T',  title:'Texto (PRO)',   desc:'Toque em qualquer lugar para adicionar uma etiqueta.'},
+              {icon:'✋', title:'Mover Tela',    desc:'Arraste para navegar pelo canvas. Tambem funciona com 2 dedos em qualquer modo.'},
+              {icon:'↖',  title:'Editar',        desc:'Toque num elemento para selecionar e arraste para mover.'},
+              {icon:'🧹', title:'Borracha',      desc:'Toque em qualquer elemento para remove-lo do canvas.'},
+              {icon:'RETO/LIVRE', title:'Modo de Linha', desc:'RETO: sempre horizontal ou vertical. LIVRE: qualquer direcao.'},
+              {icon:'↩',  title:'Desfazer',      desc:'Remove o ultimo elemento adicionado.'},
+              {icon:'↗',  title:'PNG (PRO)',      desc:'Exporta a planta como imagem PNG em alta resolucao.'},
+              {icon:'💾', title:'Salvar',         desc:'Salva o projeto na nuvem com um nome.'},
+              {icon:'📂', title:'Carregar',       desc:'Abre projetos salvos anteriormente.'},
+              {icon:'+/-',title:'Zoom',           desc:'Aumenta ou diminui o zoom. CTR centraliza. Pinca com 2 dedos tambem faz zoom.'},
             ].map((item,i) => (
               <div key={i} style={{display:'flex',gap:12,marginBottom:12,
-                padding:12,background:'var(--surface2)',borderRadius:12,
-                border:'1px solid var(--border)'}}>
-                <div style={{fontSize:18,flexShrink:0,width:30,textAlign:'center',
-                  paddingTop:1,fontFamily:'monospace'}}>{item.icon}</div>
+                padding:12,background:'var(--surface2)',borderRadius:12,border:'1px solid var(--border)'}}>
+                <div style={{fontSize:18,flexShrink:0,width:30,textAlign:'center',fontFamily:'monospace'}}>{item.icon}</div>
                 <div>
                   <p style={{fontSize:13,fontWeight:700,marginBottom:2}}>{item.title}</p>
                   <p style={{fontSize:11,color:'var(--text2)',lineHeight:1.5}}>{item.desc}</p>
@@ -910,7 +947,6 @@ export default function AppPage() {
   )
 }
 
-// ─── Styles ────────────────────────────────────────────────────────────────────
 const labelStyle    = {fontSize:10,fontFamily:'monospace',color:'var(--text2)',flexShrink:0}
 const statusItem    = {fontSize:10,fontFamily:'monospace',color:'var(--text2)'}
 const menuBtnStyle  = {display:'block',width:'100%',padding:'9px 12px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,color:'var(--text)',fontSize:13,cursor:'pointer',marginBottom:6,textAlign:'left'}
@@ -923,9 +959,8 @@ const hdrBtn        = {width:32,height:32,background:'var(--surface2)',border:'1
 const actionBtn     = {width:30,height:30,background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,cursor:'pointer',color:'var(--text2)',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}
 const zoomBtn       = {width:36,height:36,background:'var(--surface)',border:'1px solid var(--border)',color:'var(--text)',borderRadius:9,fontSize:18,fontFamily:'monospace',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}
 
-// ─── Drawing ───────────────────────────────────────────────────────────────────
 function drawGrid(ctx,W,H,pan,zoom){
-  const g=GRID,ox=-pan.x/zoom,oy=-pan.y/zoom,fw=W/zoom,fh=H/zoom
+  const g=20,ox=-pan.x/zoom,oy=-pan.y/zoom,fw=W/zoom,fh=H/zoom
   ctx.strokeStyle='rgba(255,255,255,0.04)';ctx.lineWidth=0.5
   const sx=Math.floor(ox/g)*g,sy=Math.floor(oy/g)*g
   for(let x=sx;x<ox+fw+g;x+=g){ctx.beginPath();ctx.moveTo(x,oy);ctx.lineTo(x,oy+fh);ctx.stroke()}
@@ -950,11 +985,11 @@ function drawEl(ctx,el,scale){
     ctx.fillRect(minX,minY,w,h)
     ctx.strokeStyle=color||'#3a3a50';ctx.lineWidth=thickness||2
     ctx.strokeRect(minX,minY,w,h)
-    if(w>40&&h>40) drawRectMeasures(ctx,minX,minY,w,h,scale)
+    if(w>40&&h>40)drawRectMeasures(ctx,minX,minY,w,h,scale)
   }else if(type==='door'){
-    const len=el.doorWidth ? el.doorWidth/scale : Math.sqrt((x2-x1)**2+(y2-y1)**2)
+    const len=el.doorWidth?el.doorWidth/scale:Math.sqrt((x2-x1)**2+(y2-y1)**2)
     const angle=Math.atan2(y2-y1,x2-x1)
-    const ex=x1+Math.cos(angle)*len, ey=y1+Math.sin(angle)*len
+    const ex=x1+Math.cos(angle)*len,ey=y1+Math.sin(angle)*len
     ctx.strokeStyle='#e8a847';ctx.lineWidth=2
     ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(ex,ey);ctx.stroke()
     ctx.strokeStyle='rgba(232,168,71,0.35)';ctx.lineWidth=1;ctx.setLineDash([4,4])
@@ -962,9 +997,9 @@ function drawEl(ctx,el,scale){
     ctx.setLineDash([])
     drawMeasLabel(ctx,x1,y1,ex,ey,scale,'#e8a847')
   }else if(type==='window'){
-    const len=el.windowWidth ? el.windowWidth/scale : Math.sqrt((x2-x1)**2+(y2-y1)**2)
+    const len=el.windowWidth?el.windowWidth/scale:Math.sqrt((x2-x1)**2+(y2-y1)**2)
     const angle=Math.atan2(y2-y1,x2-x1)
-    const ex=x1+Math.cos(angle)*len, ey=y1+Math.sin(angle)*len
+    const ex=x1+Math.cos(angle)*len,ey=y1+Math.sin(angle)*len
     const perp=angle+Math.PI/2
     ctx.strokeStyle='#47c4ff';ctx.lineWidth=3
     ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(ex,ey);ctx.stroke()

@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
     const payment = new Payment(client)
     const response = await payment.create({
       body: {
-        transaction_amount: 9.90,
+        transaction_amount: 19.90,
         description: 'Planta Pro - Acesso Vitalicio',
         payment_method_id: 'pix',
         payer: {

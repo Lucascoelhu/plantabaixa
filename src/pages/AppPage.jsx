@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { canAddElement, canExport, PRO_TOOLS } from '../lib/plans'
-import { doc, setDoc, getDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore'
+import { doc, setDoc, getDoc, deleteDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 
 const ROOM_COLORS = [
@@ -127,6 +127,13 @@ export default function AppPage() {
     }
   }
 
+  async function deleteProject(name) {
+    if (!confirm('Apagar o projeto "' + name + '"?')) return
+    await deleteDoc(doc(db, 'users', user.uid, 'projects', name))
+    setProjects(prev => prev.filter(p => p.name !== name))
+    toast('Projeto apagado!')
+  }
+
   useEffect(() => {
     function resize() {
       const w = wrapRef.current.clientWidth, h = wrapRef.current.clientHeight
@@ -247,9 +254,7 @@ export default function AppPage() {
       const pos = getPos(e)
       if (s.tool === 'text') { setTextPending(pos); setTextModal(true); return }
       if (s.tool === 'select') {
-        const el = hitTest(s.elements, pos.x, pos.y, s.zoom)
-
-        // Check if clicking a resize handle on selected room
+        // Check resize handle on selected room first
         if (s.selectedEl && s.selectedEl.type === 'room') {
           const handle = getResizeHandle(s.selectedEl, pos.x, pos.y, s.zoom)
           if (handle) {
@@ -261,11 +266,28 @@ export default function AppPage() {
           }
         }
 
+        // Check endpoint handle on selected wall
+        if (s.selectedEl && s.selectedEl.x1 !== undefined && s.selectedEl.type !== 'room') {
+          const HSIZE = 14 / s.zoom
+          const pts = [{x:s.selectedEl.x1,y:s.selectedEl.y1,ep:'p1'},{x:s.selectedEl.x2,y:s.selectedEl.y2,ep:'p2'}]
+          for (const pt of pts) {
+            if (Math.abs(pos.x-pt.x)<HSIZE && Math.abs(pos.y-pt.y)<HSIZE) {
+              drawRef.current.dragEl = s.selectedEl
+              drawRef.current.resizeHandle = pt.ep  // 'p1' or 'p2'
+              drawRef.current.dragOff = { x: pos.x, y: pos.y }
+              drawRef.current.origEl = { ...s.selectedEl }
+              return
+            }
+          }
+        }
+
+        const el = hitTest(s.elements, pos.x, pos.y, s.zoom)
         setSelectedEl(el || null)
         setResizeHandle(null)
         if (el) {
           drawRef.current.dragEl = el
           drawRef.current.resizeHandle = null
+          // For walls/lines: offset from x1,y1
           drawRef.current.dragOff = {
             x: pos.x - (el.x1 ?? el.x ?? 0),
             y: pos.y - (el.y1 ?? el.y ?? 0),
@@ -313,23 +335,38 @@ export default function AppPage() {
       if (s.tool === 'select' && drawRef.current.dragEl) {
         const pos = getPos(e)
         const el = drawRef.current.dragEl
+        const handle = drawRef.current.resizeHandle
 
-        // Resize room
-        if (drawRef.current.resizeHandle && el.type === 'room') {
+        // Resize room by handle
+        if (handle && el.type === 'room') {
           const orig = drawRef.current.origEl
           const dx = pos.x - drawRef.current.dragOff.x
           const dy = pos.y - drawRef.current.dragOff.y
-          const h = drawRef.current.resizeHandle
           let {x1,y1,x2,y2} = orig
-          if (h.includes('n')) y1 = orig.y1 + dy
-          if (h.includes('s')) y2 = orig.y2 + dy
-          if (h.includes('w')) x1 = orig.x1 + dx
-          if (h.includes('e')) x2 = orig.x2 + dx
+          if (handle.includes('n')) y1 = orig.y1 + dy
+          if (handle.includes('s')) y2 = orig.y2 + dy
+          if (handle.includes('w')) x1 = orig.x1 + dx
+          if (handle.includes('e')) x2 = orig.x2 + dx
           setElements(prev => prev.map(e => e !== el ? e : {...e, x1, y1, x2, y2}))
           setSelectedEl(prev => ({...prev, x1, y1, x2, y2}))
           return
         }
 
+        // Drag wall endpoint (p1 or p2)
+        if (handle === 'p1' || handle === 'p2') {
+          setElements(prev => prev.map(e => {
+            if (e !== el) return e
+            if (handle === 'p1') return {...e, x1: pos.x, y1: pos.y}
+            return {...e, x2: pos.x, y2: pos.y}
+          }))
+          setSelectedEl(prev => handle === 'p1'
+            ? {...prev, x1: pos.x, y1: pos.y}
+            : {...prev, x2: pos.x, y2: pos.y}
+          )
+          return
+        }
+
+        // Move entire element
         const dx = pos.x - drawRef.current.dragOff.x
         const dy = pos.y - drawRef.current.dragOff.y
         const mw = (el.x2 ?? 0) - (el.x1 ?? el.x ?? 0)
@@ -501,9 +538,23 @@ export default function AppPage() {
           ctx.strokeRect(h.x-hs/2, h.y-hs/2, hs, hs)
         })
       } else if (selectedEl.x1 !== undefined) {
+        // Wall/line endpoints as draggable handles
+        ctx.setLineDash([])
         for (const [px,py] of [[selectedEl.x1,selectedEl.y1],[selectedEl.x2,selectedEl.y2]]) {
-          ctx.beginPath(); ctx.arc(px, py, 8/zoom, 0, Math.PI*2); ctx.stroke()
+          // Outer circle
+          ctx.strokeStyle = 'rgba(71,196,255,0.9)'
+          ctx.lineWidth = 2/zoom
+          ctx.beginPath(); ctx.arc(px, py, 10/zoom, 0, Math.PI*2); ctx.stroke()
+          // Inner fill
+          ctx.fillStyle = 'rgba(71,196,255,0.3)'
+          ctx.beginPath(); ctx.arc(px, py, 8/zoom, 0, Math.PI*2); ctx.fill()
         }
+        // Dashed line connecting endpoints
+        ctx.strokeStyle = 'rgba(71,196,255,0.4)'
+        ctx.lineWidth = 1/zoom
+        ctx.setLineDash([4/zoom, 4/zoom])
+        ctx.beginPath(); ctx.moveTo(selectedEl.x1,selectedEl.y1); ctx.lineTo(selectedEl.x2,selectedEl.y2); ctx.stroke()
+        ctx.setLineDash([])
       }
       ctx.setLineDash([])
     }
@@ -951,14 +1002,22 @@ export default function AppPage() {
                 </p>
               : <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
                   {projects.map(p => (
-                    <button key={p.name} onClick={()=>loadProject(p.name)} style={{
-                      padding:'12px 16px',background:'var(--surface2)',
-                      border:'1px solid var(--border)',borderRadius:10,
-                      color:'var(--text)',fontSize:14,cursor:'pointer',textAlign:'left',
-                      display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                      <span style={{fontWeight:600}}>{p.name}</span>
-                      <span style={{fontSize:11,color:'var(--text2)'}}>{p.elements?.length||0} elem</span>
-                    </button>
+                    <div key={p.name} style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <button onClick={()=>loadProject(p.name)} style={{
+                        flex:1, padding:'12px 16px',background:'var(--surface2)',
+                        border:'1px solid var(--border)',borderRadius:10,
+                        color:'var(--text)',fontSize:14,cursor:'pointer',textAlign:'left',
+                        display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontWeight:600}}>{p.name}</span>
+                        <span style={{fontSize:11,color:'var(--text2)'}}>{p.elements?.length||0} elem</span>
+                      </button>
+                      <button onClick={()=>deleteProject(p.name)} style={{
+                        width:36,height:36,background:'rgba(255,107,71,0.1)',
+                        border:'1px solid rgba(255,107,71,0.3)',borderRadius:10,
+                        color:'var(--accent3)',fontSize:16,cursor:'pointer',
+                        display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
+                      }}>✕</button>
+                    </div>
                   ))}
                 </div>
             }

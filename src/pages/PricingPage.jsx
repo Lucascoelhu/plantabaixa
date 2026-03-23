@@ -232,7 +232,7 @@ export default function PricingPage() {
             ) : pixData ? (
               <>
                 <h3 style={{ fontSize:18, fontWeight:800, marginBottom:4, textAlign:'center' }}>
-                  Pague R$ 99,90 via PIX
+                  Pague R$ 9,90 via PIX
                 </h3>
                 <p style={{ fontSize:12, color:'var(--text2)', textAlign:'center', marginBottom:20 }}>
                   Escaneie o QR Code ou copie o codigo abaixo
